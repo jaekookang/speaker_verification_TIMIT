@@ -1,3 +1,7 @@
 *~
 \#*\#
+\#*
+data/TMT
+data/train
+data/test
 __pycache__/
