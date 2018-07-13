@@ -78,34 +78,6 @@ def load_data(training=True):
     return spkr_idx, mel_out, spkr2mel, spkr2idx, idx2spkr
 
 
-def pad(array, ref_shape):
-    '''Append zeros at the end
-    array: target (2-d) np.array
-    ref_shape: shape of the reference array; e.g., (20, 30)
-    '''
-    result = np.zeros(ref_shape)
-    return result[:array.shape[0], :array.shape[1]]
-
-
-def gen_spkr_data(spkr_idx, idx2spkr, spkr2mel):
-    '''Returns batch_utt examples for a given speaker'''
-
-    def slice_mel(x):
-        '''Slice mel data'''
-        x = np.load(x)
-        length = random.randint(hp.length[0], hp.length[1])  # e.g 140 ms
-        width = (length - hp.frame_width) // hp.frame_shift + 1  # e.g 12
-        beg_frame = random.randint(1, x.shape[0] - width)
-        return x[beg_frame:beg_frame+width, :]
-
-    _mel = spkr2mel[idx2spkr[spkr_idx]]
-    _mel = list(np.random.choice(_mel, hp.batch_utt, replace=True))
-    spkr = [spkr_idx]*len(_mel)
-    mel = list(map(slice_mel, _mel))
-
-    return spkr, mel
-
-
 def gen_batch():
     '''Load data and prepare queue'''
     with tf.device('/cpu:0'):
@@ -113,18 +85,33 @@ def gen_batch():
         spkr_list, mel_list, spkr2mel, spkr2idx, idx2spkr = load_data()
 
         # Get number of batches
-        spkr_set = list(idx2spkr.keys())
-        random.shuffle(spkr_set)
+        spkr_set = spkr2mel.keys()
         num_batch = len(spkr_set) // hp.batch_spkr
 
-        for sidx in range(0, len(spkr_set), hp.batch_spkr):
-            batch_x, batch_y = [], []
-            slist = spkr_set[sidx:sidx+hp.batch_spkr]
-            for i, s in enumerate(slist):
-                spkr, mel = gen_spkr_batch(s, idx2spkr, spkr2mel)
-                batch_x.append(spkr)
-                batch_y.append(mel)
-            yield batch_x, batch_y
+        # Create Queues
+        spkr, mel = tf.train.slice_input_producer(
+            [spkr_list, mel_list], shuffle=False)  # shuffle=False !!
+
+        # Slicing
+        def slice_mel(x):
+            x = np.load(x.decode('utf-8'))
+            length = random.randint(hp.length[0], hp.length[1])  # e.g 140 ms
+            width = (length - hp.frame_width) // hp.frame_shift + 1  # e.g 12
+            beg_frame = random.randint(1, x.shape[0] - width)
+            return x[beg_frame:beg_frame+width, :]
+
+        # Decoding
+        mel = tf.py_func(slice_mel, [mel], tf.float32)  # (None, num_mels)
+        mel = tf.reshape(mel, (-1, hp.num_mels))
+        spkr = tf.reshape(spkr, (-1,))
+
+        # Create batch queues
+        spkrs, mels = tf.train.batch([spkr, mel],
+                                     num_threads=10,
+                                     batch_size=hp.batch_size,
+                                     capacity=num_batch*10,
+                                     dynamic_pad=True)
+    return spkrs, mels, num_batch
 
 
 def find_elements(pattern, my_list):
@@ -152,24 +139,18 @@ def save_plot(mel_data):
 
 if __name__ == '__main__':
     # Test this code
-    # spkrs, mels, num_batch = gen_batch()
-    # spkr_list, mel_list, spkr2mel, spkr2idx, idx2spkr = load_data()
-    # spkr, mel = gen_spkr_batch(spkr_list[-1], idx2spkr, spkr2mel)
-    gen = gen_batch()
-    pdb.set_trace()
+    spkrs, mels, num_batch = gen_batch()
+
     with tf.Session() as sess:
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
         for _ in range(10):
-            # spkr_out, mel_out = sess.run([spkrs, mels])
-            # spkr_out, mel_out = sess.run([spkr, mel])
-            batch_x, batch_y = next(gen)
-            batch_xs, batch_ys = sess.run([batch_x, batch_y])
-            # uq_spkr, uq_cnt = np.unique(spkr_out, return_counts=True)
-            # print(f'Total utts: {len(spkr_out)}')
-            # print(f'Unique spkr: {len(uq_spkr)}')
-            # print(f'Utts per spkr: {uq_cnt}\n')
+            spkr_out, mel_out = sess.run([spkrs, mels])
+            uq_spkr, uq_cnt = np.unique(spkr_out, return_counts=True)
+            print(f'Total utts: {len(spkr_out)}')
+            print(f'Unique spkr: {len(uq_spkr)}')
+            print(f'Utts per spkr: {uq_cnt}\n')
             pdb.set_trace()
         save_plot(mel_out[0])
         coord.request_stop()

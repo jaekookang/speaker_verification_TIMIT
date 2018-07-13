@@ -20,7 +20,7 @@ hparams = tf.contrib.training.HParams(
 
     # Model
     num_hids=768,
-    num_layers=3,
+    num_LSTM_layers=3,
     embed_size=256,
     batch_utt=10,  # number of utterances per speaker within a mini-batch
     batch_spkr=24,  # number of speakers within a mini-batch
