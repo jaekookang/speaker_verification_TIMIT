@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import logging
 from time import strftime, gmtime
@@ -35,3 +36,12 @@ def set_logger(save_dir):
     # add the handlers to the logger
     logger.addHandler(handler)
     return logger
+
+
+def find_elements(pattern, my_list):
+    '''Find elements in a list'''
+    out = []
+    for i, l in enumerate(my_list):
+        if re.search(pattern, l):
+            out.append(my_list[i])
+    return out

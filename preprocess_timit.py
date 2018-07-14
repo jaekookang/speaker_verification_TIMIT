@@ -23,13 +23,8 @@ import random
 import numpy as np
 import librosa
 
+from utils import safe_mkdir, find_elements
 from hparams import hparams as hp
-
-
-def safe_mkdir(dir_name):
-    '''Make directory if not exist'''
-    if not os.path.exists(dir_name):
-        os.mkdir(dir_name)
 
 
 def get_utterance_interval(phn_file):
@@ -102,15 +97,6 @@ def create_spkr_folder(data_dir, spkr_list):
     for s in spkr_list:
         folder = os.path.join(data_dir, s)
         safe_mkdir(folder)
-
-
-def find_elements(pattern, my_list):
-    '''Find elements in a list'''
-    out = []
-    for i, l in enumerate(my_list):
-        if re.search(pattern, l):
-            out.append(my_list[i])
-    return out
 
 
 def divide_train_test():

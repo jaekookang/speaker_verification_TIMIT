@@ -3,6 +3,10 @@ Datafeeder
 
 2018-07-06
 
+TODO:
+[] Fix batch length difference
+[] Add batch to output file w/ speaker info
+
 ref:
 - https://www.github.com/kyubyong/deepvoice3
 '''
