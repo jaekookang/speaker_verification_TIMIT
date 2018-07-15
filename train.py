@@ -1,76 +1,149 @@
 '''
-Train
+Training
 
-2018-07-07
+2018-07-14
 '''
+
 import ipdb as pdb
 import os
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
-import utils
+from tensorflow.contrib.tensorboard.plugins import projector
+
 from datafeeder import gen_batch
 from hparams import hparams as hp
+from hparams import debug_hparams
+from utils import safe_mkdir, safe_rmdir, get_time, make_image
 
 
 class Graph:
-    def __init__(self, training=True):
 
-        # Set up Graph
+    def __init__(self, is_training=True):
+        # Set up a graph
         self.graph = tf.Graph()
         with self.graph.as_default():
-            # Define Data feeding
-            # x: mel-spectrogram, float32 (batch_size, T, num_mels)
-            # y: speaker ID (index), int32 (batch_size, 1)
-            if training:
-                self.y, self.x, num_batch = gen_batch()
-            else:
+
+            # Define data feeding
+            #  x: mel spectrogram, (batch_size, time, num_mels)
+            #  y: speaker ID (index), (batch_size,)
+            with tf.name_scope('Data'):
                 self.x = tf.placeholder(
-                    tf.float32, shape=(None, None, hp.num_mels))
-                self.y = tf.placeholder(tf.int32, shape=(None, 1))
+                    tf.float32, (None, None, hp.num_mels), 'x')
+                self.y = tf.placeholder(tf.int32, (None,), 'y')
+                self.global_step = tf.Variable(
+                    0, name='global_step', trainable=False)
 
             # Stacked LSTM
             with tf.name_scope('Stacked_LSTM'):
                 cell = tf.contrib.rnn.MultiRNNCell(
                     [tf.contrib.rnn.BasicLSTMCell(hp.num_hids)
                      for _ in range(hp.num_LSTM_layers)])
-                # time_major=False: (batch_size x time x dim)
-                # outputs: (batch_size x time x num_hids)
-                # states: (LSTMState(batch_size x num_hids),
-                #         LSTMState(batch_size x num_hids),
-                #         LSTMState(batch_size x num_hids))
                 outputs, states = tf.nn.dynamic_rnn(
                     cell, self.x, time_major=False, dtype=tf.float32)
-            last_output = outputs[:, -1, :]  # (batch_size x num_hids)
+                # outputs: (batch_size, time, num_hids)
+                # states: a stacked list of LSTMState(batch_size, num_hids)
+                last_output = outputs[:, -1, :]  # (batch_size, num_hids)
 
             # Last projection layer
-            with tf.name_scope('Output_layer'):
-                projected = tf.layers.dense(
-                    last_output, hp.embed_size, activation=None)  # linear ??
-                l2_normalized = tf.nn.l2_normalize(
+            with tf.name_scope('Projection_Layer'):  # <- 'd'-vector
+                projected = tf.layers.dense(  # (batch_size, embed_size)
+                    last_output, hp.embed_size, activation=None)
+                projected_norm = tf.nn.l2_normalize(  # (batch_size, embed_size)
                     projected, axis=1, name='L2_normalized')
 
             # Scoring
+            final_dense = True
             with tf.name_scope('Scoring'):
-                pass
-        pdb.set_trace()
+                # Make embedding matrix
+                indices = (tf.range(hp.batch_utt) +
+                           tf.range(0, hp.batch_size, hp.batch_utt)[:, tf.newaxis])[..., tf.newaxis]
+                # (batch_spkr, batch_utt, embed_size); (24, 5, 256)
+                self.embed = tf.gather_nd(
+                    projected_norm, indices, 'embeddings')
+                # Compute speaker-wise averaged centroid, (batch_spkr, embed_size)
+                self.centroid = tf.reduce_mean(self.embed, axis=1)
+                self.cos = tf.matmul(  # (batch_spkr*batch_utt, batch_spkr)
+                    projected_norm, tf.transpose(self.centroid))
+                norm = tf.matmul(tf.norm(projected_norm, axis=1, keepdims=True),
+                                 tf.transpose(tf.norm(self.centroid, axis=1, keepdims=True)))
+                self.cos /= norm  # normalize
+                self.S = tf.layers.dense(
+                    self.cos, hp.batch_spkr, activation=None, name='similarity_matrix')
+                _, spkr_idx = tf.unique(self.y)
+                # (batch_size, batch_spkr)
+                self.y_out = tf.one_hot(
+                    spkr_idx, depth=hp.batch_spkr, name='y_one_hot')
+            # Loss
+            with tf.name_scope('Loss'):
+                _loss = tf.nn.softmax_cross_entropy_with_logits_v2(
+                    labels=self.y_out, logits=self.S)
+                self.loss = tf.reduce_mean(_loss, name='loss')
 
-        # Define Loss
+            # Train op
+            with tf.name_scope('Train_Op'):
+                self.optimizer = tf.train.AdamOptimizer(
+                    learning_rate=hp.learning_rate)
+                # Gradient clipping
+                self.grads = self.optimizer.compute_gradients(self.loss)
+                self.clipped = []
+                for grad, var in self.grads:
+                    grad = tf.clip_by_norm(grad, hp.grad_clip)
+                    self.clipped.append((grad, var))
+                self.train_op = self.optimizer.apply_gradients(
+                    self.clipped, global_step=self.global_step)
 
-        pass
+            # Summary
+            with tf.name_scope('Summary'):
+                tf.summary.scalar('Loss', self.loss)
+                tf.summary.image('Similarity_matrix',
+                                 tf.reshape(self.S, (1, -1, hp.batch_spkr, 1)))
+                tf.summary.image('Onehot_matrix', tf.reshape(
+                    self.y_out, (1, -1, hp.batch_spkr, 1)))
+                tf.summary.histogram('Speakers', self.y)
+                tf.summary.histogram('Similarity_matrix', self.S)
+                self.summary_op = tf.summary.merge_all()
 
 
 if __name__ == '__main__':
-    # Setting
-    starttime = utils.get_time()
-    save_dir = os.path.join(hp.model_dir, 'model')
-    utils.safe_mkdir(save_dir)
-    logger = utils.set_logger(save_dir)
+    begtime = get_time()
+    save_dir = os.path.join(hp.model_dir, f'model_{begtime}')
+    safe_rmdir(save_dir)
+    safe_mkdir(save_dir)
 
-    G = Graph()
+    g = Graph()
     print('Graph built')
-    with G.graph.as_default():
-        with tf.Session() as sess:
-            print('haha')
+    with g.graph.as_default():
+        saver = tf.train.Saver(max_to_keep=5)
+        with tf.Session(graph=g.graph) as sess:
+            sess.run(tf.global_variables_initializer())
+            writer = tf.summary.FileWriter(save_dir, g.graph)
 
+            total_loss = 0.0
+            for i in range(hp.max_epoch):
+                print(f'Epoch:{i}/{hp.max_epoch}', flush=True)
+                gen = gen_batch()
+                batch_loss = 0.0
+                for b in tqdm(range(hp.num_batch), total=hp.num_batch, unit='b'):
+                    batch_x, batch_y = next(gen)
+                    gs, loss, summary, _ = sess.run(
+                        [g.global_step, g.loss, g.summary_op, g.train_op],
+                        {g.x: batch_x, g.y: batch_y})
+                    writer.add_summary(summary, global_step=gs)
+                    batch_loss += loss
+
+                    # Code test
+                    SIM, COS, CENT = sess.run([g.S, g.cos, g.centroid], {
+                        g.x: batch_x, g.y: batch_y})
+                    pdb.set_trace()
+                total_loss += batch_loss/hp.num_batch
+                print(f'total_loss: {total_loss}')
+
+                if (i+1) % hp.n_test == 0:
+                    # Save model
+                    saver.save(sess, os.path.join(
+                        save_dir, 'checkpoints'), global_step=gs)
+                    # Save image
+                    sim_mat, y_out = sess.run(
+                        [g.S, g.y_out], {g.x: batch_x, g.y: batch_y})
     print('Finished')

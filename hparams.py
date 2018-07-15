@@ -22,14 +22,18 @@ hparams = tf.contrib.training.HParams(
     num_hids=768,
     num_LSTM_layers=3,
     embed_size=256,
-    batch_utt=10,  # number of utterances per speaker within a mini-batch
+
+    # Train
+    batch_utt=5,  # number of utterances per speaker within a mini-batch
     batch_spkr=24,  # number of speakers within a mini-batch
-    # batch_size will be batch_utt*batch_spkr; 24*10=640
+    # batch_size will be batch_utt*batch_spkr; 24*10=240
+    num_utt=2000,  # max number of utterances in each epoch
     length=(140, 180),  # (lower bound, upper bound) in ms
-    initial_learning_rate=0.01,
-    decrease_learning_rate=10000,  # (in paper) x30M steps
+    learning_rate=0.01,
     grad_clip=3,
-    frad_scale=0.5,
+    grad_scale=0.5,  # Not implemented (TODO)
+    max_epoch=100,
+    n_test=1,
 
     # Eval
     max_iters=100000,
@@ -46,6 +50,8 @@ hparams = tf.contrib.training.HParams(
 # Add batch_size
 hparams.add_hparam(
     'batch_size', hparams.batch_utt*hparams.batch_spkr)
+hparams.add_hparam(
+    'num_batch', hparams.num_utt//hparams.batch_size)
 
 
 def debug_hparams():
@@ -53,4 +59,4 @@ def debug_hparams():
     '''
     vals = hparams.values()
     hp = [f' {name}: {vals[name]} ' for name in sorted(vals)]
-    return 'Hyperparameters\n + ----\n'+'\n'.join(hp)
+    return '__Hyperparameters__\n----\n'+'\n'.join(hp)

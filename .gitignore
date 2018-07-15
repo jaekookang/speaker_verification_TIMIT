@@ -4,4 +4,5 @@
 data/TMT
 data/train
 data/test
+model/model*
 __pycache__/

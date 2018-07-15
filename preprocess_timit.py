@@ -23,7 +23,7 @@ import random
 import numpy as np
 import librosa
 
-from utils import safe_mkdir, find_elements
+from utils import safe_mkdir, safe_rmdir, find_elements
 from hparams import hparams as hp
 
 
@@ -90,6 +90,24 @@ def get_spectrogram(wav_file, phn_file=None):
     return mel, length, mag
 
 
+def plot_mel_specgram(mel, fid, save_dir=None):
+    '''Plot mel spectrogram'''
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.imshow(mel.T, aspect='auto', origin='upper')
+    ax.set_title(fid)
+    ax.set_xlabel('frames')
+    ax.set_ylabel('Mel coefficients')
+    ax.set_xticks([])
+    if save_dir is not None:
+        fig.savefig(os.path.join(save_dir, f'{fid}.png'))
+        print(os.path.join(save_dir, f'{fid}.png'))
+    plt.close()
+
+
 def create_spkr_folder(data_dir, spkr_list):
     '''Make speaker folder
     e.g., ./data/train/FAEM0
@@ -110,8 +128,8 @@ def divide_train_test():
     '''
     # Get data list
     train_utts = 9  # total 10 utterances per speaker
-    data_list = glob.glob(os.path.join(
-        hp.timit_dir, 'T[RE]*', 'DR[0-9]', '[FM]*', '*.WAV'))
+    data_list = sorted(glob.glob(os.path.join(
+        hp.timit_dir, 'T[RE]*', 'DR[0-9]', '[FM]*', '*.WAV')))
     spkr_list = [d.split('/')[-2] for d in data_list]
     spkr_list = list(set(spkr_list))
 
@@ -138,6 +156,8 @@ if __name__ == '__main__':
     spkr_list, train_list, test_list = divide_train_test()
 
     # Create speaker folders
+    safe_rmdir(hp.train_dir)
+    safe_rmdir(hp.test_dir)
     safe_mkdir(hp.train_dir)
     safe_mkdir(hp.test_dir)
     create_spkr_folder(hp.train_dir, spkr_list)
@@ -151,10 +171,11 @@ if __name__ == '__main__':
         safe_mkdir(mel_dir)
         safe_mkdir(len_dir)
         phn_file = os.path.join(path, fid.replace('.WAV', '.PHN'))
-        mel, nframe, _ = get_spectrogram(f, phn_file)  # (num_mels, T)
+        mel, nframe, _ = get_spectrogram(f, phn_file)  # (num_mels, time)
         # Save
         np.save(os.path.join(mel_dir, fid.replace('.WAV', '.npy')), mel)
         np.save(os.path.join(len_dir, fid.replace('.WAV', '.npy')), nframe)
+        # plot_mel_specgram(mel, f, hp.data_dir)
 
     print('Convert test data')
     for f in tqdm.tqdm(test_list):
@@ -164,7 +185,7 @@ if __name__ == '__main__':
         safe_mkdir(mel_dir)
         safe_mkdir(len_dir)
         phn_file = os.path.join(path, fid.replace('.WAV', '.PHN'))
-        mel, nframe, _ = get_spectrogram(f, phn_file)  # (num_mels, T)
+        mel, nframe, _ = get_spectrogram(f, phn_file)  # (num_mels, time)
         # Save
         np.save(os.path.join(mel_dir, fid.replace('.WAV', '.npy')), mel)
         np.save(os.path.join(len_dir, fid.replace('.WAV', '.npy')), nframe)

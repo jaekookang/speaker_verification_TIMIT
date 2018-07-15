@@ -2,6 +2,8 @@ import os
 import re
 import shutil
 import logging
+import numpy as np
+from PIL import Image
 from time import strftime, gmtime
 
 
@@ -40,8 +42,34 @@ def set_logger(save_dir):
 
 def find_elements(pattern, my_list):
     '''Find elements in a list'''
-    out = []
+    elements = []
+    index = []
+
     for i, l in enumerate(my_list):
         if re.search(pattern, l):
-            out.append(my_list[i])
-    return out
+            elements.append(my_list[i])
+            index.append(i)
+    return index, elements
+
+
+def pad(array, ref_shape):
+    '''Append zeros at the end
+    array: target (2-d) np.array
+    ref_shape: shape of the reference array; e.g., (20, 30)
+    '''
+    result = np.zeros(ref_shape)
+    return result[:array.shape[0], :array.shape[1]]
+
+
+def make_image(array, save_dir=None, name=None):
+    '''Make numpy array into .png image'''
+    # Scale values in the range of 0 ~ 1
+    scaled = array - array.min()/(array - array.min()).max()
+    img = Image.fromarray(np.uint8(scaled*255), 'L')
+    if save_dir is not None:
+        if name is not None:
+            img.save(os.path.join(save_dir, name+'.png'))
+        else:
+            img.save(os.path.join(save_dir, 'test.png'))
+    else:
+        return img

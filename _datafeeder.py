@@ -83,7 +83,7 @@ def gen_batch():
     with tf.device('/cpu:0'):
         # Load data
         spkr_list, mel_list, spkr2mel, spkr2idx, idx2spkr = load_data()
-
+        pdb.set_trace()
         # Get number of batches
         spkr_set = spkr2mel.keys()
         num_batch = len(spkr_set) // hp.batch_spkr
