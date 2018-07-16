@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from PIL import Image
 from time import strftime, gmtime
+import pandas as pd
 
 
 def safe_mkdir(folder):
@@ -73,3 +74,18 @@ def make_image(array, save_dir=None, name=None):
             img.save(os.path.join(save_dir, 'test.png'))
     else:
         return img
+
+
+def write_spkr_meta(spkr_id, save_dir, spkr_file='data/SPKRINFO_rev.txt'):
+    '''Write speaker meta file
+    and return meta file path'''
+    df = pd.read_table(spkr_file, sep=',')
+    sex = df.Sex[df.ID.isin(spkr_id)].tolist()
+    region = df.DR[df.ID.isin(spkr_id)].tolist()
+
+    # Write meta file
+    meta_dir = os.path.join(save_dir, 'meta.tsv')
+    with open(meta_dir, 'w') as f:
+        for s, x, r in zip(spkr_id, sex, region):
+            f.write(f'{s}_{x}_{r}\n')
+    return meta_dir

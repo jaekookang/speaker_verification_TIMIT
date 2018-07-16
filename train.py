@@ -14,7 +14,7 @@ from tensorflow.contrib.tensorboard.plugins import projector
 from datafeeder import gen_batch
 from hparams import hparams as hp
 from hparams import debug_hparams
-from utils import safe_mkdir, safe_rmdir, get_time, make_image
+from utils import *
 
 
 class Graph:
@@ -49,7 +49,7 @@ class Graph:
             with tf.name_scope('Projection_Layer'):  # <- 'd'-vector
                 projected = tf.layers.dense(  # (batch_size, embed_size)
                     last_output, hp.embed_size, activation=None)
-                projected_norm = tf.nn.l2_normalize(  # (batch_size, embed_size)
+                self.projected_norm = tf.nn.l2_normalize(  # (batch_size, embed_size)
                     projected, axis=1, name='L2_normalized')
 
             # Scoring
@@ -60,14 +60,18 @@ class Graph:
                            tf.range(0, hp.batch_size, hp.batch_utt)[:, tf.newaxis])[..., tf.newaxis]
                 # (batch_spkr, batch_utt, embed_size); (24, 5, 256)
                 self.embed = tf.gather_nd(
-                    projected_norm, indices, 'embeddings')
-                # Compute speaker-wise averaged centroid, (batch_spkr, embed_size)
-                self.centroid = tf.reduce_mean(self.embed, axis=1)
-                self.cos = tf.matmul(  # (batch_spkr*batch_utt, batch_spkr)
-                    projected_norm, tf.transpose(self.centroid))
-                norm = tf.matmul(tf.norm(projected_norm, axis=1, keepdims=True),
-                                 tf.transpose(tf.norm(self.centroid, axis=1, keepdims=True)))
-                self.cos /= norm  # normalize
+                    self.projected_norm, indices, 'embeddings')
+                # Compute speaker-wise averaged centroid,
+                # (batch_spkr, embed_size) -> (embed_size, batch_spkr)
+                self.centroid = tf.transpose(tf.reduce_mean(
+                    self.embed, axis=1), name='centroid')
+                # (batch_spkr*batch_utt, batch_spkr)
+                self.cos = tf.matmul(self.projected_norm, self.centroid)
+                self.norm = tf.matmul(tf.norm(self.projected_norm,
+                                              axis=1, keepdims=True),
+                                      tf.norm(self.centroid,
+                                              axis=0, keepdims=True), name='norm')
+                self.cos /= self.norm  # normalize
                 self.S = tf.layers.dense(
                     self.cos, hp.batch_spkr, activation=None, name='similarity_matrix')
                 _, spkr_idx = tf.unique(self.y)
@@ -100,6 +104,10 @@ class Graph:
                                  tf.reshape(self.S, (1, -1, hp.batch_spkr, 1)))
                 tf.summary.image('Onehot_matrix', tf.reshape(
                     self.y_out, (1, -1, hp.batch_spkr, 1)))
+                tf.summary.image('Centroid', tf.reshape(
+                    self.centroid, (1, -1, hp.batch_spkr, 1)))
+                tf.summary.image('Norm', tf.reshape(
+                    self.norm, (1, -1, hp.batch_spkr, 1)))
                 tf.summary.histogram('Speakers', self.y)
                 tf.summary.histogram('Similarity_matrix', self.S)
                 self.summary_op = tf.summary.merge_all()
@@ -118,6 +126,7 @@ if __name__ == '__main__':
         with tf.Session(graph=g.graph) as sess:
             sess.run(tf.global_variables_initializer())
             writer = tf.summary.FileWriter(save_dir, g.graph)
+            config = projector.ProjectorConfig()
 
             total_loss = 0.0
             for i in range(hp.max_epoch):
@@ -126,16 +135,24 @@ if __name__ == '__main__':
                 batch_loss = 0.0
                 for b in tqdm(range(hp.num_batch), total=hp.num_batch, unit='b'):
                     batch_x, batch_y = next(gen)
-                    gs, loss, summary, _ = sess.run(
-                        [g.global_step, g.loss, g.summary_op, g.train_op],
+                    gs, loss, summary, spkrs, _ = sess.run(
+                        [g.global_step, g.loss, g.summary_op, g.y, g.train_op],
                         {g.x: batch_x, g.y: batch_y})
                     writer.add_summary(summary, global_step=gs)
                     batch_loss += loss
 
-                    # Code test
-                    SIM, COS, CENT = sess.run([g.S, g.cos, g.centroid], {
-                        g.x: batch_x, g.y: batch_y})
-                    pdb.set_trace()
+                    # Get speaker meta file
+                    idx2spkr = np.load('data/idx2spkr.npy').item()
+                    spkr_id = list(set([idx2spkr[i] for i in spkrs]))
+                    meta_file = write_spkr_meta(spkr_id, save_dir)
+
+                    # Add embedding on TensorBoard
+                    for _var in [g.S.name, g.centroid.name,
+                                 g.norm.name, g.projected_norm.name]:
+                        embedding = config.embeddings.add()
+                        embedding.tensor_name = _var
+                        embedding.metadata_path = meta_file
+                    projector.visualize_embeddings(writer, config)
                 total_loss += batch_loss/hp.num_batch
                 print(f'total_loss: {total_loss}')
 
@@ -143,7 +160,4 @@ if __name__ == '__main__':
                     # Save model
                     saver.save(sess, os.path.join(
                         save_dir, 'checkpoints'), global_step=gs)
-                    # Save image
-                    sim_mat, y_out = sess.run(
-                        [g.S, g.y_out], {g.x: batch_x, g.y: batch_y})
     print('Finished')
