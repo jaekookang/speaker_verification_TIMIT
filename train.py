@@ -71,17 +71,19 @@ class Graph:
                                               axis=1, keepdims=True),
                                       tf.norm(self.centroid,
                                               axis=0, keepdims=True), name='norm')
-                self.cos /= self.norm  # normalize
+                # self.cos /= self.norm  # normalize
                 self.S = tf.layers.dense(
                     self.cos, hp.batch_spkr, activation=None, name='similarity_matrix')
-                _, spkr_idx = tf.unique(self.y)
+                _, self.spkr_idx = tf.unique(self.y)
                 # (batch_size, batch_spkr)
                 self.y_out = tf.one_hot(
-                    spkr_idx, depth=hp.batch_spkr, name='y_one_hot')
+                    self.spkr_idx, depth=hp.batch_spkr, name='y_one_hot')
             # Loss
             with tf.name_scope('Loss'):
-                _loss = tf.nn.softmax_cross_entropy_with_logits_v2(
-                    labels=self.y_out, logits=self.S)
+                # _loss = tf.nn.softmax_cross_entropy_with_logits_v2(
+                #     labels=self.y_out, logits=self.S)
+                _loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    labels=self.spkr_idx, logits=self.S)
                 self.loss = tf.reduce_mean(_loss, name='loss')
 
             # Train op
@@ -126,7 +128,12 @@ if __name__ == '__main__':
         with tf.Session(graph=g.graph) as sess:
             sess.run(tf.global_variables_initializer())
             writer = tf.summary.FileWriter(save_dir, g.graph)
-            config = projector.ProjectorConfig()
+            # config = projector.ProjectorConfig()
+            # # Add embedding on TensorBoard
+            # embedding = config.embeddings.add()
+            # embedding.tensor_name = g.centroid.name
+            # # embedding.metadata_path = meta_file
+            # projector.visualize_embeddings(writer, config)
 
             total_loss = 0.0
             for i in range(hp.max_epoch):
@@ -146,13 +153,6 @@ if __name__ == '__main__':
                     spkr_id = list(set([idx2spkr[i] for i in spkrs]))
                     meta_file = write_spkr_meta(spkr_id, save_dir)
 
-                    # Add embedding on TensorBoard
-                    for _var in [g.S.name, g.centroid.name,
-                                 g.norm.name, g.projected_norm.name]:
-                        embedding = config.embeddings.add()
-                        embedding.tensor_name = _var
-                        embedding.metadata_path = meta_file
-                    projector.visualize_embeddings(writer, config)
                 total_loss += batch_loss/hp.num_batch
                 print(f'total_loss: {total_loss}')
 

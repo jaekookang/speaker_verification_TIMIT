@@ -25,7 +25,7 @@ hparams = tf.contrib.training.HParams(
 
     # Train
     batch_utt=5,  # number of utterances per speaker within a mini-batch
-    batch_spkr=24,  # number of speakers within a mini-batch
+    batch_spkr=50,  # number of speakers within a mini-batch
     # batch_size will be batch_utt*batch_spkr; 24*10=240
     num_utt=2000,  # max number of utterances in each epoch
     length=(140, 180),  # (lower bound, upper bound) in ms
