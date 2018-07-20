@@ -24,11 +24,13 @@ hparams = tf.contrib.training.HParams(
     embed_size=256,
 
     # Train
+    segments=['ix'],  # segments to draw samples from
+    # (SEE: data/phone_code_freq_dur.csv)
+    length=(140, 180),  # (lower bound, upper bound) in ms
     batch_utt=5,  # number of utterances per speaker within a mini-batch
     batch_spkr=50,  # number of speakers within a mini-batch
     # batch_size will be batch_utt*batch_spkr; 24*10=240
     num_utt=2000,  # max number of utterances in each epoch
-    length=(140, 180),  # (lower bound, upper bound) in ms
     learning_rate=0.01,
     grad_clip=3,
     grad_scale=0.5,  # Not implemented (TODO)
@@ -44,14 +46,14 @@ hparams = tf.contrib.training.HParams(
     train_dir='./data/train',  # new
     test_dir='./data/test',  # new
     model_dir='./model',
-    meta_dir='./data/SPKRINFO_rev.txt'
+    meta_dir='./data/spkr_info.txt',
 )
 
 # Add batch_size
 hparams.add_hparam(
-    'batch_size', hparams.batch_utt*hparams.batch_spkr)
+    'batch_size', hparams.batch_utt * hparams.batch_spkr)
 hparams.add_hparam(
-    'num_batch', hparams.num_utt//hparams.batch_size)
+    'num_batch', hparams.num_utt // hparams.batch_size)
 
 
 def debug_hparams():
@@ -59,4 +61,4 @@ def debug_hparams():
     '''
     vals = hparams.values()
     hp = [f' {name}: {vals[name]} ' for name in sorted(vals)]
-    return '__Hyperparameters__\n----\n'+'\n'.join(hp)
+    return '__Hyperparameters__\n----\n' + '\n'.join(hp)
