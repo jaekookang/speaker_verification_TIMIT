@@ -47,13 +47,12 @@ class Graph:
 
             # Last projection layer
             with tf.name_scope('Projection_Layer'):  # <- 'd'-vector
-                projected = tf.layers.dense(  # (batch_size, embed_size)
+                self.projected = tf.layers.dense(  # (batch_size, embed_size)
                     last_output, hp.embed_size, activation=None)
                 self.projected_norm = tf.nn.l2_normalize(  # (batch_size, embed_size)
-                    projected, axis=1, name='L2_normalized')
+                    self.projected, axis=1, name='L2_normalized')
 
             # Scoring
-            final_dense = True
             with tf.name_scope('Scoring'):
                 # Make embedding matrix
                 indices = (tf.range(hp.batch_utt) +
@@ -71,6 +70,7 @@ class Graph:
                                               axis=1, keepdims=True),
                                       tf.norm(self.centroid,
                                               axis=0, keepdims=True), name='norm')
+                # (batch_spkr*batch_utt, batch_spkr)
                 self.cos /= self.norm  # normalize
                 self.S = tf.layers.dense(
                     self.cos, hp.batch_spkr, activation=None, name='similarity_matrix')
@@ -80,8 +80,8 @@ class Graph:
                     self.spkr_idx, depth=hp.batch_spkr, name='y_one_hot')
             # Loss
             with tf.name_scope('Loss'):
-                # _loss = tf.nn.softmax_cross_entropy_with_logits_v2(
-                #     labels=self.y_out, logits=self.S)
+                _loss = tf.nn.softmax_cross_entropy_with_logits_v2(
+                    labels=self.y_out, logits=self.S)
                 _loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=self.spkr_idx, logits=self.S)
                 self.loss = tf.reduce_mean(_loss, name='loss')
@@ -114,6 +114,12 @@ class Graph:
                 tf.summary.histogram('Similarity_matrix', self.S)
                 self.summary_op = tf.summary.merge_all()
 
+                self.config = projector.ProjectorConfig()
+                # Add embedding on TensorBoard
+                embedding = self.config.embeddings.add()
+                embedding.tensor_name = self.centroid.name
+                # embedding.metadata_path = meta_file
+
 
 if __name__ == '__main__':
     begtime = get_time()
@@ -128,12 +134,7 @@ if __name__ == '__main__':
         with tf.Session(graph=g.graph) as sess:
             sess.run(tf.global_variables_initializer())
             writer = tf.summary.FileWriter(save_dir, g.graph)
-            # config = projector.ProjectorConfig()
-            # # Add embedding on TensorBoard
-            # embedding = config.embeddings.add()
-            # embedding.tensor_name = g.centroid.name
-            # # embedding.metadata_path = meta_file
-            # projector.visualize_embeddings(writer, config)
+            projector.visualize_embeddings(writer, g.config)
 
             total_loss = 0.0
             for i in range(hp.max_epoch):

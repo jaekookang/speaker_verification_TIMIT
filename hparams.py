@@ -24,6 +24,9 @@ hparams = tf.contrib.training.HParams(
     embed_size=256,
 
     # Train
+    #    If segments are empty (''), data will be random sampled
+    #    If segments are specified, segments will be retrieved as a whole
+    #       and hparams.length will be ignored (TODO: add options)
     segments=['ix'],  # segments to draw samples from
     # (SEE: data/phone_code_freq_dur.csv)
     length=(140, 180),  # (lower bound, upper bound) in ms

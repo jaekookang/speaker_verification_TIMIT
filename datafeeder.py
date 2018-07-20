@@ -3,11 +3,10 @@ Datafeeder
 
 2018-07-06
 
-TODO:
-[] Fix batch length difference
-[] Add batch to output file w/ speaker info
+Note:
+- segment option is considered here
 
-ref:
+Ref:
 - https://www.github.com/kyubyong/deepvoice3
 '''
 import ipdb as pdb
@@ -84,11 +83,20 @@ def slice_mel(x, length):
     return x[beg_frame:beg_frame+length, :]  # (time, num_mels)
 
 
+def load_textgrid(tg_file, tiername='phone'):
+    '''Load textgrid file'''
+    T = textgrid.TextGrid()
+    T.read(tg_file)
+
+
 def gen_batch(is_training=True):
     '''Load data and prepare queue'''
     with tf.device('/cpu:0'):
         # Load data
         mel_list, spkr_list = load_data(is_training)
+
+        # load_textgrid(mel_list[0])
+        # 여기서부터 다시 할 것!
 
         # For each mini-batch
         i = 0
@@ -110,7 +118,7 @@ def gen_batch(is_training=True):
             yield mel_batch, spkr_batch
 
 
-def save_plot(mel_data):
+def save_plot(mel_data, suffix=None):
     '''Save Mel outputs as png'''
     import matplotlib
     matplotlib.use('Agg')
@@ -119,7 +127,7 @@ def save_plot(mel_data):
     fig, ax = plt.subplots(figsize=(10, 10))
     # (num_mels x time)
     ax.imshow(mel_data.T, aspect='auto', origin='bottom')
-    plt.savefig('out.png', format='png')
+    plt.savefig(f'out{suffix}.png', format='png')
 
 
 if __name__ == '__main__':

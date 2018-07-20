@@ -76,7 +76,7 @@ def make_image(array, save_dir=None, name=None):
         return img
 
 
-def write_spkr_meta(spkr_id, save_dir, spkr_file='data/SPKRINFO_rev.txt'):
+def write_spkr_meta(spkr_id, save_dir, spkr_file='data/spkr_info.txt'):
     '''Write speaker meta file
     and return meta file path'''
     df = pd.read_table(spkr_file, sep=',')

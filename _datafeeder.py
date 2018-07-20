@@ -3,18 +3,25 @@ Datafeeder
 
 2018-07-06
 
+TODO:
+[] Fix batch length difference
+[] Add batch to output file w/ speaker info
+
 ref:
 - https://www.github.com/kyubyong/deepvoice3
 '''
 import ipdb as pdb
 import os
-import re
 import glob
 import random
 import numpy as np
 import tensorflow as tf
 import pandas as pd
+import textgrid
+from tqdm import tqdm
+
 from hparams import hparams as hp
+from utils import safe_mkdir, safe_rmdir, find_elements
 
 
 def load_meta_data(meta_data):
@@ -22,7 +29,7 @@ def load_meta_data(meta_data):
     return pd.read_table(meta_data, sep=',')
 
 
-def load_data(training=True):
+def load_data(is_training=True):
     '''Load data
 
     Returns:
@@ -37,92 +44,70 @@ def load_data(training=True):
     # Make data lists with ID and data directory
     spkr_list, mel_list = [], []
     # Get Mel directories
-    if training:
-        mel_list = sorted(glob.glob(os.path.join(
-            hp.train_dir, '**', 'mel', '*.npy')))
-    else:
-        mel_list = sorted(glob.glob(os.path.join(
-            hp.test_dir, '**', 'mel', '*.npy')))
+    mel_train = sorted(glob.glob(os.path.join(
+        hp.train_dir, '**', 'mel', '*.npy')))
+    mel_test = sorted(glob.glob(os.path.join(
+        hp.test_dir, '**', 'mel', '*.npy')))
+    mel_all = mel_train + mel_test
 
     # Get speaker IDs
-    for m in mel_list:
+    for m in mel_all:
         spkr_list.append(m.split('/')[-3])
-    spkr2mel = {s: [] for s in spkr_list}
+    spkr_uq = list(set(spkr_list))
+    spkr2idx = {s: i for i, s in enumerate(spkr_uq)}
+    idx2spkr = {i: s for i, s in enumerate(spkr_uq)}
+    # Save
+    np.save(os.path.join(hp.data_dir, 'spkr2idx.npy'), spkr2idx)
+    np.save(os.path.join(hp.data_dir, 'idx2spkr.npy'), idx2spkr)
 
-    # Get spkr2mel dictionary
-    for s, m in zip(spkr_list, mel_list):
-        spkr2mel[s].append(m)
-
-    assert spkr_list != []
-    assert mel_list != []
-
-    # Organize speaker ID with mel files
-    # To balanace each mini-batch with batch_spkr and batch_utt,
-    # data were appended sequentially as below:
-    spkr_set = list(set(spkr_list))
-    spkr_out, mel_out = [], []
-    for sidx in range(0, len(spkr_set), hp.batch_spkr):
-        try:
-            slist = spkr_set[sidx:sidx+hp.batch_spkr]
-        except:
-            slist = spkr_set[sidx:]
-        for s in slist:
-            rnd_samp = list(np.random.choice(spkr2mel[s], hp.batch_utt))
-            mel_out += rnd_samp
-            spkr_out += [s]*hp.batch_utt
-
-    # Load dictionary
-    spkr2idx = np.load(os.path.join(hp.data_dir, 'spkr2idx.npy')).item()
-    idx2spkr = np.load(os.path.join(hp.data_dir, 'idx2spkr.npy')).item()
-    spkr_idx = [spkr2idx[s] for s in spkr_out]
-    return spkr_idx, mel_out, spkr2mel, spkr2idx, idx2spkr
+    # Make balanced dataset
+    if is_training:
+        mel_list = mel_train
+    else:
+        mel_list = mel_test
+    mel_bal = []  # a list of mel files
+    spkr_bal = []  # a list of spkr (idx)
+    for i in range(hp.num_batch):
+        spkr_samp = random.sample(spkr_uq, hp.batch_spkr)
+        for s in spkr_samp:
+            _, _mel = find_elements(s, mel_list)
+            mel_samp = random.choices(_mel, k=hp.batch_utt)
+            mel_bal += mel_samp
+            spkr_bal += [spkr2idx[s]]*hp.batch_utt
+    return mel_bal, spkr_bal
 
 
-def gen_batch():
+def slice_mel(x, length):
+    '''Slice mel data'''
+    x = np.load(x)
+    beg_frame = random.randint(1, x.shape[0] - length)
+    return x[beg_frame:beg_frame+length, :]  # (time, num_mels)
+
+
+def gen_batch(is_training=True):
     '''Load data and prepare queue'''
     with tf.device('/cpu:0'):
         # Load data
-        spkr_list, mel_list, spkr2mel, spkr2idx, idx2spkr = load_data()
-        pdb.set_trace()
-        # Get number of batches
-        spkr_set = spkr2mel.keys()
-        num_batch = len(spkr_set) // hp.batch_spkr
+        mel_list, spkr_list = load_data(is_training)
 
-        # Create Queues
-        spkr, mel = tf.train.slice_input_producer(
-            [spkr_list, mel_list], shuffle=False)  # shuffle=False !!
-
-        # Slicing
-        def slice_mel(x):
-            x = np.load(x.decode('utf-8'))
-            length = random.randint(hp.length[0], hp.length[1])  # e.g 140 ms
-            width = (length - hp.frame_width) // hp.frame_shift + 1  # e.g 12
-            beg_frame = random.randint(1, x.shape[0] - width)
-            return x[beg_frame:beg_frame+width, :]
-
-        # Decoding
-        mel = tf.py_func(slice_mel, [mel], tf.float32)  # (None, num_mels)
-        mel = tf.reshape(mel, (-1, hp.num_mels))
-        spkr = tf.reshape(spkr, (-1,))
-
-        # Create batch queues
-        spkrs, mels = tf.train.batch([spkr, mel],
-                                     num_threads=10,
-                                     batch_size=hp.batch_size,
-                                     capacity=num_batch*10,
-                                     dynamic_pad=True)
-    return spkrs, mels, num_batch
-
-
-def find_elements(pattern, my_list):
-    '''Find elements in a list'''
-    elements = []
-    index = []
-    for i, l in enumerate(my_list):
-        if re.search(pattern, l):
-            elements.append(my_list[i])
-            index.append(i)
-    return index, elements
+        # For each mini-batch
+        i = 0
+        for b in range(hp.num_batch):
+            # Randomly choose frame number (140<= len <=180)
+            length = random.randint(hp.length[0], hp.length[1])
+            # Initiate (batch_size, length, num_mels)
+            mel_batch = np.zeros((hp.batch_size, length, hp.num_mels))
+            spkr_batch = []  # (batch_size)
+            # Stack data
+            m = 0
+            while 1:
+                mel_batch[m] = slice_mel(mel_list[i], length)
+                spkr_batch.append(spkr_list[i])
+                i += 1
+                m += 1
+                if i % hp.batch_size == 0:
+                    break
+            yield mel_batch, spkr_batch
 
 
 def save_plot(mel_data):
@@ -138,20 +123,8 @@ def save_plot(mel_data):
 
 
 if __name__ == '__main__':
-    # Test this code
-    spkrs, mels, num_batch = gen_batch()
-
-    with tf.Session() as sess:
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
-
-        for _ in range(10):
-            spkr_out, mel_out = sess.run([spkrs, mels])
-            uq_spkr, uq_cnt = np.unique(spkr_out, return_counts=True)
-            print(f'Total utts: {len(spkr_out)}')
-            print(f'Unique spkr: {len(uq_spkr)}')
-            print(f'Utts per spkr: {uq_cnt}\n')
-            pdb.set_trace()
-        save_plot(mel_out[0])
-        coord.request_stop()
-        coord.join(threads)
+    # batch_x, batch_y, batch_x_txt, num_batch = gen_batch()
+    gen = gen_batch()
+    for _ in range(hp.num_batch):
+        x, y = next(gen)
+        pdb.set_trace()
