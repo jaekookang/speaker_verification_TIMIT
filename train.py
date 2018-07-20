@@ -71,7 +71,7 @@ class Graph:
                                               axis=1, keepdims=True),
                                       tf.norm(self.centroid,
                                               axis=0, keepdims=True), name='norm')
-                # self.cos /= self.norm  # normalize
+                self.cos /= self.norm  # normalize
                 self.S = tf.layers.dense(
                     self.cos, hp.batch_spkr, activation=None, name='similarity_matrix')
                 _, self.spkr_idx = tf.unique(self.y)

@@ -17,6 +17,7 @@ import random
 import numpy as np
 import tensorflow as tf
 import pandas as pd
+import textgrid
 from tqdm import tqdm
 
 from hparams import hparams as hp
