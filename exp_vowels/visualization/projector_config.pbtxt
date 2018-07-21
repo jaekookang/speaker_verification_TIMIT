@@ -1,0 +1,4 @@
+embeddings {
+  tensor_name: "Vowel_vectors_by_speakers:0"
+  metadata_path: "meta.tsv"
+}
