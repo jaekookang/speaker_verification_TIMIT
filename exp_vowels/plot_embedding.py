@@ -8,8 +8,10 @@ import matplotlib.pyplot as plt
 import ipdb as pdb
 from time import strftime, gmtime
 import os
+import re
 import sys
 import shutil
+import random
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -37,12 +39,17 @@ def safe_rmdir(path):
         pass
 
 
-def make_tsv(save_dir):
-    '''Make tsv meta file'''
-    header = S.columns[:3].tolist() + ['Vowel', 'Speaker']
+def make_tsv(save_dir, spkr_id=None):
+    '''Make tsv meta file
+
+    Make meta.tsv (default)
+    Make meta_{spkr}.tsv (optional)
+    '''
+    header = S.columns[:3].tolist() + ['Vowel']
+
+    # For each speaker
     with open(os.path.join(save_dir, 'meta.tsv'), 'w') as f:
         f.write('\t'.join(header) + '\n')
-        # For each speaker
         for s in sdict.keys():
             data = S.loc[S.ID == s, ['ID', 'Sex', 'DR']].values[0]
             data = [str(d) for d in data]
@@ -50,17 +57,35 @@ def make_tsv(save_dir):
             for v in vowels:
                 # For each data point
                 for r in range(sdict[s][v].shape[0]):
-                    f.write('\t'.join(data + [v] + [data[0]]) + '\n')
+                    f.write('\t'.join(data + [v]) + '\n')
+    # Only speakers in spkr_id
+    if spkr_id is not None:
+        for s in spkr_id:
+            with open(os.path.join(save_dir, f'meta_{s}.tsv'), 'w') as f:
+                f.write('\t'.join(header) + '\n')
+                data = S.loc[S.ID == s, ['ID', 'Sex', 'DR']].values[0]
+                data = [str(d) for d in data]
+                # For each vowel
+                for v in vowels:
+                    # For each data point
+                    for r in range(sdict[s][v].shape[0]):
+                        f.write('\t'.join(data + [v]) + '\n')
     print('tsv written')
 
 
 if __name__ == '__main__':
     # Get suffix for LOG_DIR
-    suffix = sys.argv[1]
+    try:
+        suffix = sys.argv[1]
+    except IndexError:
+        print('\n >> Provide suffix for log directory! << \n')
+        print(' eg. python plot_embedding.py allSpeakers')
+        raise
 
     # Load data
     SDICT_DIR = 'spkr_dict.npy'
     LOG_DIR = f'vis_{suffix}'
+    META_DIR = os.path.join(LOG_DIR, 'meta')
     sdict = np.load(SDICT_DIR).item()
     S = pd.read_table('../data/spkr_info.txt', sep=',', na_filter=False)
     vowels = ['iy', 'ae', 'aa']
@@ -68,32 +93,48 @@ if __name__ == '__main__':
 
     safe_rmdir(LOG_DIR)
     safe_mkdir(LOG_DIR)
+    safe_mkdir(META_DIR)
 
     # Combine all data
     _x = np.array([], dtype=np.float32).reshape(0, 40)
+    sdict_cent = {s: np.array([], dtype=np.float32).reshape(0, 40)
+                  for s in sdict.keys()}
     for s in sdict.keys():
         for v in vowels:
             _x = np.vstack([_x, sdict[s][v]])
+            sdict_cent[s] = np.vstack(
+                [sdict_cent[s],
+                 sdict[s][v] - np.mean(sdict[s][v], axis=0, keepdims=True)])
+
     # Center data
+    pdb.set_trace()
     x = _x - np.mean(_x, axis=0, keepdims=True)
 
     # Select num dimension & make tf.Variable
-    var = []
+    var1, var2 = [], []
     for d in NUM_DIM:
-        var.append(tf.Variable(x[:, :d], name=f'Vowel_vectors_ndim_{d}'))
+        var1.append(tf.Variable(x[:, :-d], name=f'Vowel_vectors_ndim_{d}'))
+    for s in sdict_cent.keys():
+        var2.append(tf.Variable(sdict_cent[s], name=f'{s}'))
 
     # Write meta file
-    make_tsv(LOG_DIR)
+    make_tsv(META_DIR)
+    make_tsv(META_DIR, sdict_cent.keys())
 
     # Set up summary
     summary = tf.summary.FileWriter(LOG_DIR)
 
     # Set up configuration
     config = projector.ProjectorConfig()
-    for v in var:
+    for v in var1:  # for all speakers
         embedding = config.embeddings.add()
         embedding.tensor_name = v.name
-        embedding.metadata_path = 'meta.tsv'
+        embedding.metadata_path = 'meta/meta.tsv'
+    for v in var2:  # for individual speakers
+        embedding = config.embeddings.add()
+        embedding.tensor_name = v.name
+        _name = re.sub('\:[0-9]', '', v.name)
+        embedding.metadata_path = f"meta/meta_{_name}.tsv"
     projector.visualize_embeddings(summary, config)
 
     # Save the data
