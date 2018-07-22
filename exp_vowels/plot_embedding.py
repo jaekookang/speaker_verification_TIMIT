@@ -12,6 +12,8 @@ import re
 import sys
 import shutil
 import random
+import glob
+import librosa
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -83,6 +85,7 @@ if __name__ == '__main__':
         raise
 
     # Load data
+    TMT_DIR = '../data/TMT'
     SDICT_DIR = 'spkr_dict.npy'
     LOG_DIR = f'vis_{suffix}'
     META_DIR = os.path.join(LOG_DIR, 'meta')
@@ -107,13 +110,15 @@ if __name__ == '__main__':
                  sdict[s][v] - np.mean(sdict[s][v], axis=0, keepdims=True)])
 
     # Center data
-    pdb.set_trace()
     x = _x - np.mean(_x, axis=0, keepdims=True)
+
+    # Prepare audio data
+    wavs = sorted(glob.glob(os.path.join(TMT_DIR, '**', '**', '**', '*.WAV')))
 
     # Select num dimension & make tf.Variable
     var1, var2 = [], []
     for d in NUM_DIM:
-        var1.append(tf.Variable(x[:, :-d], name=f'Vowel_vectors_ndim_{d}'))
+        var1.append(tf.Variable(x[:, :d], name=f'Vowel_vectors_ndim_{d}'))
     for s in sdict_cent.keys():
         var2.append(tf.Variable(sdict_cent[s], name=f'{s}'))
 
@@ -122,6 +127,16 @@ if __name__ == '__main__':
     make_tsv(META_DIR, sdict_cent.keys())
 
     # Set up summary
+    for wav in wavs[:10]:
+        fid = wav.split('/')[-2][1:]
+        y, sr = librosa.load(wav, sr=16000)
+        '''
+        tf.pyfunc같은거 써서 텐서로 불러들이고
+        밑에서 sess.run등으로 서머리에 더하자!
+        '''
+        tf.summary.audio(f'{fid}', y.reshape((1, -1)),
+                         sample_rate=16000, max_outputs=1, family=fid)
+    summary_op = tf.summary.merge_all()
     summary = tf.summary.FileWriter(LOG_DIR)
 
     # Set up configuration
