@@ -90,22 +90,26 @@ def get_spectrogram(wav_file, phn_file=None):
     return mel, length, mag
 
 
-def plot_mel_specgram(mel, fid, save_dir=None):
+def plot_mel_specgram(mel, fid, use_agg=False, save_dir=None):
     '''Plot mel spectrogram'''
-    import matplotlib
-    matplotlib.use('Agg')
+    if use_agg:
+        import matplotlib
+        matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    ax.imshow(mel.T, aspect='auto', origin='upper')
+    ax.imshow(mel.T, aspect='auto', origin='lower')
     ax.set_title(fid)
     ax.set_xlabel('frames')
-    ax.set_ylabel('Mel coefficients')
-    ax.set_xticks([])
+    ax.set_ylabel('Coefficients')
     if save_dir is not None:
         fig.savefig(os.path.join(save_dir, f'{fid}.png'))
         print(os.path.join(save_dir, f'{fid}.png'))
-    plt.close()
+        plt.close()
+    if use_agg:
+        plt.close()
+    if save_dir is None:
+        plt.show()
 
 
 def create_spkr_folder(data_dir, spkr_list):
@@ -171,7 +175,7 @@ if __name__ == '__main__':
         safe_mkdir(mel_dir)
         safe_mkdir(len_dir)
         phn_file = os.path.join(path, fid.replace('.WAV', '.PHN'))
-        mel, nframe, _ = get_spectrogram(f, phn_file)  # (num_mels, time)
+        mel, nframe, mag = get_spectrogram(f, phn_file)  # (num_mels, time)
         # Save
         np.save(os.path.join(mel_dir, fid.replace('.WAV', '.npy')), mel)
         np.save(os.path.join(len_dir, fid.replace('.WAV', '.npy')), nframe)
@@ -185,7 +189,7 @@ if __name__ == '__main__':
         safe_mkdir(mel_dir)
         safe_mkdir(len_dir)
         phn_file = os.path.join(path, fid.replace('.WAV', '.PHN'))
-        mel, nframe, _ = get_spectrogram(f, phn_file)  # (num_mels, time)
+        mel, nframe, mag = get_spectrogram(f, phn_file)  # (num_mels, time)
         # Save
         np.save(os.path.join(mel_dir, fid.replace('.WAV', '.npy')), mel)
         np.save(os.path.join(len_dir, fid.replace('.WAV', '.npy')), nframe)
