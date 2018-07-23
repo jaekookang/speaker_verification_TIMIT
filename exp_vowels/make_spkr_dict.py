@@ -5,6 +5,7 @@ Exp1. Test within-speaker variability
 '''
 import ipdb as pdb
 import os
+import sys
 import re
 import textgrid
 import glob
@@ -22,7 +23,7 @@ class hparams:
         self.frame_width = 25
         self.frame_shift = 10
         self.preemphasis = 0.97
-        self.n_mfcc = 12
+        self.n_mfcc = 36
 
 
 # Get parameters
@@ -61,10 +62,14 @@ def read_phn(phn_file):
 def get_spectrogram(wav_file, phn_file, segment, time='center'):
     '''Returns normalized log mel-filterbank energies
     based on the specified segment (eg. 'iy' as string)
-
+mels_amp, mels_db, mags_amp, mags_db, mfcc_all
     Returns:
-      mel: a list of mel spectrogram
-      time_vec: a list of time vector
+      mels_amp: np.array of mel amplitude
+      mels_db: amplitude_to_db(mels_amp)
+      mags_amp: np.array of FFT amplitude
+      mags_db: amplitude_to_db(mags_amp)
+      mfcc_all: np.array of mfcc 
+
     '''
     # Load wav file
     _y, sr = librosa.load(wav_file, sr=hp.sample_rate)
@@ -106,7 +111,8 @@ def get_spectrogram(wav_file, phn_file, segment, time='center'):
             _mag = _mag.T.astype(np.float32)  # (time, 1+num_freq//2)
 
             # MFCC
-            # mfcc = librosa.feature.mfcc(S=mel, n_mfcc=hp.n_mfcc).T
+            #   mfcc = librosa.feature.mfcc(S=mel, n_mfcc=hp.n_mfcc).T
+            #   -> This method shows different result
             mfcc = librosa.feature.mfcc(
                 y=y, sr=hp.sample_rate, n_mfcc=hp.n_mfcc).T
 
@@ -133,23 +139,31 @@ def get_spectrogram(wav_file, phn_file, segment, time='center'):
             mfcc_all = np.vstack([mfcc_all, mfcc_slice])
     else:
         return None
-    return mels_amp, mels_db, mags_amp, mags_db, mfcc_all
+    return (mels_amp, mels_db, mags_amp, mags_db, mfcc_all)
 
 
 if __name__ == '__main__':
     # Get directories
-    TMT_DIR = '/Volumes/Transcend/_DataArchive/TMT'
+    if sys.platform == 'darwin':
+        TMT_DIR = '/Volumes/Transcend/_DataArchive/TMT'
+    else:
+        TMT_DIR = '../data/TMT'
     TRAIN_DIR = os.path.join(TMT_DIR, 'TRAIN')
     TEST_DIR = os.path.join(TMT_DIR, 'TEST')
     SPKR_INFO = '../data/spkr_info.txt'
     S = pd.read_table(SPKR_INFO, sep=',', na_filter=False)
 
     # Get files
-    _trains = glob.glob(os.path.join(
-        TRAIN_DIR, 'DR[0-9]', '[FM]*[0-9]', '*.wav'))
-    _tests = glob.glob(os.path.join(
-        TEST_DIR, 'DR[0-9]', '[FM]*[0-9]', '*.wav'))
-    wavs = sorted(_trains) + sorted(_tests)
+    if sys.platform == 'darwin':
+        wav_ext = '*.wav'
+    elif sys.platform == 'linux':
+        wav_ext = '*.WAV'
+    else:
+        raise Exception(
+            f'OS should be either darwin of linux, not {sys.platform}')
+    wavs = sorted(glob.glob(
+        os.path.join(TMT_DIR, '**', '**', '**', wav_ext)))
+    assert len(wavs) > 0
 
     # Speaker list
     spkrs = S.ID.unique().tolist()  # eg. JMI0
@@ -157,19 +171,19 @@ if __name__ == '__main__':
 
     # Make speaker dictionary
     #  - normalize vector length
-    init = np.array([], dtype=np.float32).reshape(0, 40)
+    init = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
     sdict = {s: {v: init for v in vowels} for s in spkrs}
     for i, wav in enumerate(wavs):
         # eg. [FM] + JMI0
         spkr_id = re.search('DR[0-9]/(\w+\d)/', wav).group(1)
-        phn = re.sub('wav', 'PHN', wav)
+        phn = re.sub('wav|WAV', 'PHN', wav)
         for v in vowels:
-            mels_amp, mels_db, mags_amp, mags_db = get_spectrogram(
-                wav, phn, v, time='center')
-            if mels_db is not None:
+            out = get_spectrogram(wav, phn, v, time='center')
+            if out is not None:
+                mels_amp, mels_db, mags_amp, mags_db, mfcc = out
                 _data = sdict[spkr_id[1:]][v]
-                sdict[spkr_id[1:]][v] = np.vstack([_data, mels_db])
-        if i % 100 == 0:
+                sdict[spkr_id[1:]][v] = np.vstack([_data, mfcc])
+        if (i+1) % 100 == 0:
             print(f'{i+1}/{len(wavs)}')
 
     # Save

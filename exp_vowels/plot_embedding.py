@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.contrib.tensorboard.plugins import projector
+from make_spkr_dict import hp
 
 
 def timenow():
@@ -99,8 +100,8 @@ if __name__ == '__main__':
     safe_mkdir(META_DIR)
 
     # Combine all data
-    _x = np.array([], dtype=np.float32).reshape(0, 40)
-    sdict_cent = {s: np.array([], dtype=np.float32).reshape(0, 40)
+    _x = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
+    sdict_cent = {s: np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
                   for s in sdict.keys()}
     for s in sdict.keys():
         for v in vowels:
@@ -120,24 +121,20 @@ if __name__ == '__main__':
     for d in NUM_DIM:
         var1.append(tf.Variable(x[:, :d], name=f'Vowel_vectors_ndim_{d}'))
     for s in sdict_cent.keys():
-        var2.append(tf.Variable(sdict_cent[s], name=f'{s}'))
+        var2.append(tf.Variable(sdict_cent[s][:, :3], name=f'{s}'))
 
     # Write meta file
     make_tsv(META_DIR)
     make_tsv(META_DIR, sdict_cent.keys())
 
     # Set up summary
-    for wav in wavs[:10]:
+    for wav in wavs[:100]:
         fid = wav.split('/')[-2][1:]
         y, sr = librosa.load(wav, sr=16000)
-        '''
-        tf.pyfunc같은거 써서 텐서로 불러들이고
-        밑에서 sess.run등으로 서머리에 더하자!
-        '''
         tf.summary.audio(f'{fid}', y.reshape((1, -1)),
                          sample_rate=16000, max_outputs=1, family=fid)
     summary_op = tf.summary.merge_all()
-    summary = tf.summary.FileWriter(LOG_DIR)
+    writer = tf.summary.FileWriter(LOG_DIR)
 
     # Set up configuration
     config = projector.ProjectorConfig()
@@ -150,12 +147,14 @@ if __name__ == '__main__':
         embedding.tensor_name = v.name
         _name = re.sub('\:[0-9]', '', v.name)
         embedding.metadata_path = f"meta/meta_{_name}.tsv"
-    projector.visualize_embeddings(summary, config)
+    projector.visualize_embeddings(writer, config)
 
     # Save the data
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
+    summary = sess.run(summary_op)
+    writer.add_summary(summary)
     saver.save(sess, os.path.join(LOG_DIR, 'data.ckpt'), 1)
 
     print('done')
