@@ -63,13 +63,14 @@ def get_spectrogram(wav_file, phn_file, segment, time='center'):
     '''Returns normalized log mel-filterbank energies
     based on the specified segment (eg. 'iy' as string)
 mels_amp, mels_db, mags_amp, mags_db, mfcc_all
+
     Returns:
       mels_amp: np.array of mel amplitude
       mels_db: amplitude_to_db(mels_amp)
       mags_amp: np.array of FFT amplitude
       mags_db: amplitude_to_db(mags_amp)
       mfcc_all: np.array of mfcc 
-
+      ctx: phone labels (triphone); eg. ['h#_sh_iy', ...]
     '''
     # Load wav file
     _y, sr = librosa.load(wav_file, sr=hp.sample_rate)
@@ -85,6 +86,20 @@ mels_amp, mels_db, mags_amp, mags_db, mfcc_all
     mfcc_all = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
     idx, _ = find_elements(segment, labels)
     if len(idx) > 0:
+        # Get context
+        ctx = []
+        for i in idx:
+            if (i-1) < 0:
+                pre = '#'
+            else:
+                pre = labels[i-1]
+            if (i+1) > len(labels):
+                post = '#'
+            else:
+                post = labels[i+1]
+            ctx.append('_'.join([pre, labels[i], post]))
+
+        # Audio processing
         for i in idx:
             # Extract sample
             begT, endT = samples[i, 0], samples[i, 1]
@@ -139,7 +154,7 @@ mels_amp, mels_db, mags_amp, mags_db, mfcc_all
             mfcc_all = np.vstack([mfcc_all, mfcc_slice])
     else:
         return None
-    return (mels_amp, mels_db, mags_amp, mags_db, mfcc_all)
+    return (mels_amp, mels_db, mags_amp, mags_db, mfcc_all, ctx)
 
 
 if __name__ == '__main__':
@@ -167,12 +182,15 @@ if __name__ == '__main__':
 
     # Speaker list
     spkrs = S.ID.unique().tolist()  # eg. JMI0
-    vowels = ['iy', 'ae', 'aa']
+    vowels = ['iy', 'aa', 'uh', 's', 'z', 'sh', 'f']
 
     # Make speaker dictionary
     #  - normalize vector length
     init = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
+    # vowel dictionary
     sdict = {s: {v: init for v in vowels} for s in spkrs}
+    # context dictionary
+    cdict = {s: {v: [] for v in vowels} for s in spkrs}
     for i, wav in enumerate(wavs):
         # eg. [FM] + JMI0
         spkr_id = re.search('DR[0-9]/(\w+\d)/', wav).group(1)
@@ -180,12 +198,14 @@ if __name__ == '__main__':
         for v in vowels:
             out = get_spectrogram(wav, phn, v, time='center')
             if out is not None:
-                mels_amp, mels_db, mags_amp, mags_db, mfcc = out
+                mels_amp, mels_db, mags_amp, mags_db, mfcc, ctx = out
                 _data = sdict[spkr_id[1:]][v]
                 sdict[spkr_id[1:]][v] = np.vstack([_data, mfcc])
+                cdict[spkr_id[1:]][v] += ctx
         if (i+1) % 100 == 0:
             print(f'{i+1}/{len(wavs)}')
 
     # Save
-    np.save('spkr_dict.npy', sdict)
+    np.save('spkr_sdict.npy', sdict)
+    np.save('spkr_cdict.npy', cdict)
     print('Finished')

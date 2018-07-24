@@ -42,25 +42,26 @@ def safe_rmdir(path):
         pass
 
 
-def make_tsv(save_dir, spkr_id=None):
+def make_tsv(save_dir, spkr_keys, spkr_id=None):
     '''Make tsv meta file
 
     Make meta.tsv (default)
     Make meta_{spkr}.tsv (optional)
     '''
-    header = S.columns[:3].tolist() + ['Vowel']
+    header = S.columns[:3].tolist() + ['Vowel'] + ['Context']
 
     # For each speaker
     with open(os.path.join(save_dir, 'meta.tsv'), 'w') as f:
         f.write('\t'.join(header) + '\n')
-        for s in sdict.keys():
+        for s in spkr_keys:
             data = S.loc[S.ID == s, ['ID', 'Sex', 'DR']].values[0]
             data = [str(d) for d in data]
             # For each vowel
             for v in vowels:
                 # For each data point
                 for r in range(sdict[s][v].shape[0]):
-                    f.write('\t'.join(data + [v]) + '\n')
+                    ctx = cdict[s][v][r]
+                    f.write('\t'.join(data + [v] + [ctx]) + '\n')
     # Only speakers in spkr_id
     if spkr_id is not None:
         for s in spkr_id:
@@ -72,7 +73,8 @@ def make_tsv(save_dir, spkr_id=None):
                 for v in vowels:
                     # For each data point
                     for r in range(sdict[s][v].shape[0]):
-                        f.write('\t'.join(data + [v]) + '\n')
+                        ctx = cdict[s][v][r]
+                        f.write('\t'.join(data + [v] + [ctx]) + '\n')
     print('tsv written')
 
 
@@ -87,13 +89,17 @@ if __name__ == '__main__':
 
     # Load data
     TMT_DIR = '../data/TMT'
-    SDICT_DIR = 'spkr_dict.npy'
+    SDICT_DIR = 'spkr_sdict.npy'
+    CDICT_DIR = 'spkr_cdict.npy'
     LOG_DIR = f'vis_{suffix}'
     META_DIR = os.path.join(LOG_DIR, 'meta')
     sdict = np.load(SDICT_DIR).item()
+    cdict = np.load(CDICT_DIR).item()
     S = pd.read_table('../data/spkr_info.txt', sep=',', na_filter=False)
-    vowels = ['iy', 'ae', 'aa']
+    vowels = ['iy', 'aa', 'uh', 's', 'z', 'sh', 'f']
     NUM_DIM = [3, 6, 12, 24, 36]
+    spkr_num = 630  # total: 630
+    spkr_keys = random.sample([*sdict], spkr_num)
 
     safe_rmdir(LOG_DIR)
     safe_mkdir(LOG_DIR)
@@ -102,19 +108,27 @@ if __name__ == '__main__':
     # Combine all data
     _x = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
     sdict_cent = {s: np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
-                  for s in sdict.keys()}
-    for s in sdict.keys():
+                  for s in spkr_keys}
+    meta_spkr_vowel = []
+    for s in spkr_keys:
         for v in vowels:
             _x = np.vstack([_x, sdict[s][v]])
             sdict_cent[s] = np.vstack(
                 [sdict_cent[s],
                  sdict[s][v] - np.mean(sdict[s][v], axis=0, keepdims=True)])
+            # Add meta lines
+            for _ in range(sdict[s][v].shape[0]):
+                meta_spkr_vowel.append([s, v])
 
     # Center data
     x = _x - np.mean(_x, axis=0, keepdims=True)
+    # Save centered data
+    np.save(os.path.join(LOG_DIR, 'x_data.npy'), x)
+    # Save meta data (speaker, vowel)
+    np.save(os.path.join(LOG_DIR, 'x_meta.npy'), meta_spkr_vowel)
 
-    # Prepare audio data
-    wavs = sorted(glob.glob(os.path.join(TMT_DIR, '**', '**', '**', '*.WAV')))
+    # # Prepare audio data
+    # wavs = sorted(glob.glob(os.path.join(TMT_DIR, '**', '**', '**', '*.WAV')))
 
     # Select num dimension & make tf.Variable
     var1, var2 = [], []
@@ -124,15 +138,15 @@ if __name__ == '__main__':
         var2.append(tf.Variable(sdict_cent[s][:, :3], name=f'{s}'))
 
     # Write meta file
-    make_tsv(META_DIR)
-    make_tsv(META_DIR, sdict_cent.keys())
+    make_tsv(META_DIR, spkr_keys)
+    make_tsv(META_DIR, spkr_keys, spkr_id=sdict_cent.keys())
 
     # Set up summary
-    for wav in wavs[:100]:
-        fid = wav.split('/')[-2][1:]
-        y, sr = librosa.load(wav, sr=16000)
-        tf.summary.audio(f'{fid}', y.reshape((1, -1)),
-                         sample_rate=16000, max_outputs=1, family=fid)
+    # for wav in wavs[:100]:
+    #     fid = wav.split('/')[-2][1:]
+    #     y, sr = librosa.load(wav, sr=16000)
+    #     tf.summary.audio(f'{fid}', y.reshape((1, -1)),
+    #                      sample_rate=16000, max_outputs=1, family=fid)
     summary_op = tf.summary.merge_all()
     writer = tf.summary.FileWriter(LOG_DIR)
 
@@ -153,8 +167,8 @@ if __name__ == '__main__':
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
-    summary = sess.run(summary_op)
-    writer.add_summary(summary)
+    # summary = sess.run(summary_op)
+    # writer.add_summary(summary)
     saver.save(sess, os.path.join(LOG_DIR, 'data.ckpt'), 1)
 
     print('done')
