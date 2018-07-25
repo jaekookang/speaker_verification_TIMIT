@@ -4,5 +4,6 @@
 data/TMT
 data/train
 data/test
+data.ckpt*
 model/model*
 __pycache__/

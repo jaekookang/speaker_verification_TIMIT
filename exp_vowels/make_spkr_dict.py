@@ -182,7 +182,10 @@ if __name__ == '__main__':
 
     # Speaker list
     spkrs = S.ID.unique().tolist()  # eg. JMI0
-    vowels = ['iy', 'aa', 'uh', 's', 'z', 'sh', 'f']
+    vowels = ['iy', 'ae', 'aa', 'uh',
+              'b', 'd', 'g', 'p', 't', 'k',
+              's', 'z', 'sh', 'dh', 'f', 'v',
+              'jh', 'ch']
 
     # Make speaker dictionary
     #  - normalize vector length
@@ -206,6 +209,6 @@ if __name__ == '__main__':
             print(f'{i+1}/{len(wavs)}')
 
     # Save
-    np.save('spkr_sdict.npy', sdict)
-    np.save('spkr_cdict.npy', cdict)
+    np.save('spkr_sdict_vowel_stop_fric_afric.npy', sdict)
+    np.save('spkr_cdict_vowel_stop_fric_afric.npy', cdict)
     print('Finished')
