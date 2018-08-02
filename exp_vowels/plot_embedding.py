@@ -48,7 +48,7 @@ def make_tsv(save_dir, spkr_keys, spkr_id=None):
     Make meta.tsv (default)
     Make meta_{spkr}.tsv (optional)
     '''
-    header = S.columns[:3].tolist() + ['Vowel'] + ['Context']
+    header = S.columns[:3].tolist() + ['Phone'] + ['Context']
 
     # For each speaker
     with open(os.path.join(save_dir, 'meta.tsv'), 'w') as f:
