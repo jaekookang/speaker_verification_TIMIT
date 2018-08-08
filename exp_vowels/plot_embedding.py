@@ -57,7 +57,7 @@ def make_tsv(save_dir, spkr_keys, spkr_id=None):
             data = S.loc[S.ID == s, ['ID', 'Sex', 'DR']].values[0]
             data = [str(d) for d in data]
             # For each vowel
-            for v in vowels:
+            for v in phones:
                 # For each data point
                 for r in range(sdict[s][v].shape[0]):
                     ctx = cdict[s][v][r]
@@ -70,7 +70,7 @@ def make_tsv(save_dir, spkr_keys, spkr_id=None):
                 data = S.loc[S.ID == s, ['ID', 'Sex', 'DR']].values[0]
                 data = [str(d) for d in data]
                 # For each vowel
-                for v in vowels:
+                for v in phones:
                     # For each data point
                     for r in range(sdict[s][v].shape[0]):
                         ctx = cdict[s][v][r]
@@ -91,18 +91,20 @@ if __name__ == '__main__':
     TMT_DIR = '../data/TMT'
     # SDICT_DIR = 'spkr_sdict.npy'
     # CDICT_DIR = 'spkr_cdict.npy'
-    SDICT_DIR = 'spkr_sdict_vowel_stop_fric_afric.npy'
-    CDICT_DIR = 'spkr_cdict_vowel_stop_fric_afric.npy'
+    # SDICT_DIR = 'spkr_sdict_vowel_stop_fric_afric.npy'
+    SDICT_DIR = 'spkr_sdict_fftdct.npy'
+    CDICT_DIR = 'spkr_cdict.npy'
     LOG_DIR = f'vis_{suffix}'
     META_DIR = os.path.join(LOG_DIR, 'meta')
     sdict = np.load(SDICT_DIR).item()
     cdict = np.load(CDICT_DIR).item()
     S = pd.read_table('../data/spkr_info.txt', sep=',', na_filter=False)
     # vowels = ['iy', 'aa', 'uh', 's', 'z', 'sh', 'f']
-    vowels = ['iy', 'ae', 'aa', 'uh',
-              'b', 'd', 'g', 'p', 't', 'k',
-              's', 'z', 'sh', 'dh', 'f', 'v',
-              'jh', 'ch']
+    # vowels = ['iy', 'ae', 'aa', 'uh',
+    #           'b', 'd', 'g', 'p', 't', 'k',
+    #           's', 'z', 'sh', 'dh', 'f', 'v',
+    #           'jh', 'ch']
+    phones = ['iy', 'aa', 'uh', 's', 'f']
     NUM_DIM = [3, 6, 12, 24, 36]
     spkr_num = 630  # total: 630
     spkr_keys = random.sample([*sdict], spkr_num)
@@ -117,7 +119,7 @@ if __name__ == '__main__':
                   for s in spkr_keys}
     meta_spkr_vowel = []
     for s in spkr_keys:
-        for v in vowels:
+        for v in phones:
             _x = np.vstack([_x, sdict[s][v]])
             sdict_cent[s] = np.vstack(
                 [sdict_cent[s],

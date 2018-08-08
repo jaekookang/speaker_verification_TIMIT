@@ -25,10 +25,10 @@ class hparams:
         self.num_mels = 40
         self.num_freq = 1025  # =nfft
         self.sample_rate = 16000
-        self.frame_width = 25
-        self.frame_shift = 10
+        self.win_size = 0.02
+        self.win_step = 0.01
         self.preemphasis = 0.97
-        self.n_mfcc = 36
+        self.ndct = 36  # =numcep, num mfcc coeffs
         self.nfilt = 40
 
 
@@ -79,8 +79,8 @@ mels_amp, mels_db, mags_amp, mags_db, mfcc_all
       ctx: phone labels (triphone); eg. ['h#_sh_iy', ...]
     '''
     # Initialize SpeechFeatures
-    S = SpeechFeatures(wav_file, hp.frame_width, hp.frame_shift, hp.num_freq,
-                       hp.nfilt, hp.n_mfcc, win_fun=np.hamming, pre_emp=hp.preemphasis)
+    S = SpeechFeatures(wav_file, hp.win_size, hp.win_step, hp.num_freq,
+                       hp.nfilt, hp.ndct, win_fun=np.hamming, pre_emp=hp.preemphasis)
     # # Load wav file
     # _y, sr = librosa.load(wav_file, sr=hp.sample_rate)
 
@@ -89,10 +89,10 @@ mels_amp, mels_db, mags_amp, mags_db, mfcc_all
 
     # Iterate over provided segments
     logspec_all = np.array([], dtype=np.float32).reshape(
-        0, 1 + hp.num_freq // 2)
+        0, 1 + hp.num_freq // 2)  # (,513)
     fftdct_all = np.array([], dtype=np.float32).reshape(
-        0, hp.n_mfcc)
-    mfcc_all = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
+        0, hp.ndct)  # (,36)
+    mfcc_all = np.array([], dtype=np.float32).reshape(0, hp.ndct)  # (,36)
     idx, _ = find_elements(segment, labels)
     if len(idx) > 0:
         # Get context
@@ -112,13 +112,13 @@ mels_amp, mels_db, mags_amp, mags_db, mfcc_all
         for i in idx:
             # Extract sample
             begT, endT = samples[i, 0], samples[i, 1]
-            S.sig = S.sig[begT:endT]
+            sig_part = S.sig[begT:endT]
             # Get magnitude spectrogram (db, =log spectrogram)
-            magspec, powspec, logspec = S.get_fft()
+            magspec, powspec, logspec = S.get_fft(sig_part)
             # Get dct of logspec
             fftdct = S.apply_dct(logspec)
             # Get MFCCs
-            mfcc = S.get_mfcc()
+            mfcc = S.get_mfcc(powspec)
             # Slice sample (at mid point; TODO: add frame choice)
             if time == 'center':
                 logspec = logspec[logspec.shape[0]//2, :]
@@ -162,31 +162,30 @@ if __name__ == '__main__':
 
     # Speaker list
     spkrs = S.ID.unique().tolist()  # eg. JMI0
-    # vowels = ['iy', 'ae', 'aa', 'uh',
+    # phones = ['iy', 'ae', 'aa', 'uh',
     #           'b', 'd', 'g', 'p', 't', 'k',
     #           's', 'z', 'sh', 'dh', 'f', 'v',
     #           'jh', 'ch']
-    vowels = ['iy', 'aa', 'uh', 's']
+    phones = ['iy', 'aa', 'uh', 's', 'f']
 
     # Make speaker dictionary
-    #  - normalize vector length
     init_spec = np.array([], dtype=np.float32).reshape(0, 1 + hp.num_freq//2)
-    init_dct = np.array([], dtype=np.float32).reshape(0, hp.n_mfcc)
+    init_dct = np.array([], dtype=np.float32).reshape(0, hp.ndct)
     # logspec dictionary
-    logspec_d = {s: {v: init_spec for v in vowels} for s in spkrs}
+    logspec_d = {s: {v: init_spec for v in phones} for s in spkrs}
     # fftdct dictionary
-    fftdct_d = {s: {v: init_dct for v in vowels} for s in spkrs}
+    fftdct_d = {s: {v: init_dct for v in phones} for s in spkrs}
     # mfcc dictionary
-    mfcc_d = {s: {v: init_dct for v in vowels} for s in spkrs}
+    mfcc_d = {s: {v: init_dct for v in phones} for s in spkrs}
     # context dictionary
-    cdict = {s: {v: [] for v in vowels} for s in spkrs}
+    cdict = {s: {v: [] for v in phones} for s in spkrs}
 
     for i, wav in enumerate(tqdm(wavs)):
         # eg. [FM] + JMI0
         spkr_id = re.search('DR[0-9]/(\w+\d)/', wav).group(1)
         phn = re.sub('wav|WAV', 'PHN', wav)
-        for v in vowels:
-            out = get_spectrogram(wav, phn, v, time='center')
+        for v in phones:
+            out = get_spectrogram(wav, phn, v, time='all')
             if out is not None:
                 logspec, fftdct, mfcc, ctx = out
                 # logspec dictionary
@@ -204,8 +203,8 @@ if __name__ == '__main__':
             print(f'{i+1}/{len(wavs)}')
 
     # Save
-    np.save('spkr_sdict_logspec.npy', logspec_d)
-    np.save('spkr_sdict_fftdct.npy', fftdct_d)
-    np.save('spkr_sdict_mfcc.npy', mfcc_d)
-    np.save('spkr_cdict.npy', cdict)
+    np.save('spkr_sdict_logspec_all.npy', logspec_d)
+    np.save('spkr_sdict_fftdct_all.npy', fftdct_d)
+    np.save('spkr_sdict_mfcc_all.npy', mfcc_d)
+    np.save('spkr_cdict_all.npy', cdict)
     print('Finished')
