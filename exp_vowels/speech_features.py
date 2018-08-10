@@ -100,7 +100,7 @@ class SpeechFeatures:
 
     def get_fft(self, sig=None, nfft=None, linfilt=False, nfilt=None):
         '''Compute SFFT'''
-        if not nfft:
+        if nfft is None:
             nfft = self.nfft
         if sig is None:
             sig = self.sig
@@ -165,9 +165,9 @@ class SpeechFeatures:
 
     def get_melfilt(self, nfft=None, nfilt=None, pow_frames=None):
         '''Compute Mel filterbanks'''
-        if not nfft:
+        if nfft is None:
             nfft = self.nfft
-        if not nfilt:
+        if nfilt is None:
             nfilt = self.nfilt
         if pow_frames is None:
             _, pow_frames, _ = self.get_fft()
@@ -234,10 +234,10 @@ class SpeechFeatures:
             nfilt = self.nfilt
         # mfcc
         linear = librosa.stft(y=sig, n_fft=nfft, win_length=int(self.win_size*srate),
-                             hop_length=int(self.win_step*srate))
-        mag = np.abs(linear) # get magnitude spectrogram
+                              hop_length=int(self.win_step*srate))
+        mag = np.abs(linear)  # get magnitude spectrogram
         mel_basis = librosa.filters.mel(srate, nfft, nfilt)
-        mel = np.dot(mel_basis, mag) # n_mel x time
+        mel = np.dot(mel_basis, mag)  # n_mel x time
         mel = librosa.amplitude_to_db(mel)
         mfcc = librosa.feature.mfcc(y=None, sr=srate, S=mel, n_mfcc=ndct).T
         # mfcc -= (np.mean(mfcc, axis=0) + 1e-8)
@@ -257,7 +257,7 @@ class SpeechFeatures:
         if not nfft:
             nfft = self.nfft
         # mfcc
-        mfcc = pysf_mfcc(sig, srate, winlen=self.win_size, winstep=self.win_step, 
+        mfcc = pysf_mfcc(sig, srate, winlen=self.win_size, winstep=self.win_step,
                          numcep=ndct, nfilt=nfilt, nfft=nfft, appendEnergy=False)
         return mfcc
 
