@@ -100,12 +100,14 @@ def get_spectrogram(wav_file, phn_file, segment, time='center'):
             begT, endT = samples[i, 0], samples[i, 1]
             sig_part = S.sig[begT:endT]
             # Get magnitude spectrogram (db, =log spectrogram)
-            _, powspec, _ = S.get_fft(sig_part)
-            # Slice sample (at mid point; TODO: add frame choice)
+            _, powspec, _ = S.get_fft(sig=sig_part)
+            # Slice sample
             if time == 'center':
                 fft = powspec[powspec.shape[0]//2, :]
+                # fft = logspec[logspec.shape[0]//2, :]
             elif time == 'all':
                 fft = powspec
+                # fft = logspec
             else:
                 raise Exception(f'time={time} is not supported yet')
             # Add mel spectrogram
@@ -128,10 +130,10 @@ def get_spectrogram(wav_file, phn_file, segment, time='center'):
 
 def get_pca(data, n_comp):
     '''Reduce the dimension of the data into n_comp
-    (n x k) --> (n x n_comp)
+    (n x p) --> (n x n_comp)
     '''
     pca = PCA(n_components=n_comp)
-    return pca.fit_transform(data)
+    return pca, pca.fit_transform(data)
 
 
 if __name__ == '__main__':
@@ -171,17 +173,19 @@ if __name__ == '__main__':
     # fft dictionary
     fft_d = {s: {v: init_fft for v in phones} for s in spkrs}
     fftall = np.array([], dtype=np.float32).reshape(0, hp.num_freq//2+1)
-    # mfcc dictionary
+    # pca dictionary
     fftpca_d = {s: {v: init_fftpca for v in phones} for s in spkrs}
+    fftres_d = {s: {v: init_fft for v in phones} for s in spkrs}
     # context dictionary
     cdict = {s: {v: [] for v in phones} for s in spkrs}
 
+    spkrs = []
+    phns = []
     for i, wav in enumerate(tqdm(wavs)):
         # eg. [FM] + JMI0
         spkr_id = re.search('DR[0-9]/(\w+\d)/', wav).group(1)
         phn = re.sub('wav|WAV', 'PHN', wav)
-        spkrs = []
-        phns = []
+
         for v in phones:
             out = get_spectrogram(wav, phn, v, time='all')
             if out is not None:
@@ -202,11 +206,17 @@ if __name__ == '__main__':
             print(f'{i+1}/{len(wavs)}')
 
     # Redistribute data into dictionary
-    fftpca = get_pca(fftall, n_comp=hp.nfilt)
-    for s, v in tqdm(zip(spkrs, phns)):
-        fftpca_d[s][v] = np.vstack([fftpca_d[s][v], fftpca[0]])
+    pca, fftpca = get_pca(fftall, hp.nfilt)
+    fftinv = pca.inverse_transform(fftpca)
+    fftres = fftall - fftinv
+    for i, (s, v) in tqdm(enumerate(zip(spkrs, phns))):
+        fftpca_d[s][v] = np.vstack([fftpca_d[s][v], fftpca[i]])
+        fftres_d[s][v] = np.vstack([fftres_d[s][v], fftres[i]])
+    # np.save('fft_raw.npy', fftall)
+    # np.save('fft_pca.npy', fftpca)
     # Save
-    np.save('spkr_sdict_fft.npy', fft_d)
-    np.save('spkr_sdict_fftpca.npy', fftpca_d)
-    np.save('spkr_cdict_fft.npy', cdict)
+    # np.save('spkr_sdict_fft.npy', fft_d)
+    # np.save('spkr_sdict_fftpca.npy', fftpca_d)
+    np.save('spkr_sdict_fftres.npy', fftres_d)
+    # np.save('spkr_cdict_fft.npy', cdict)
     print('Finished')

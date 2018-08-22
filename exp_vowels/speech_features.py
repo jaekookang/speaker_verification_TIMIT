@@ -55,7 +55,7 @@ class SpeechFeatures:
         except:
             # TIMIT has b'NIST' format which throws error
             # when using scipy.io.wavfile.read
-            sig, self.srate = librosa.load(self.wav_id)
+            sig, self.srate = librosa.load(self.wav_id, sr=None)
         # Preemphasis
         if self.pre_emp:
             # Check value range (0 ~ 1)
@@ -82,7 +82,7 @@ class SpeechFeatures:
         # Pad signal
         pad_sig_len = self.num_frames * self.frame_step + self.frame_len  # 57840
         pad = np.zeros((pad_sig_len - sig_len))
-        sig_pad = np.append(self.sig, pad)
+        sig_pad = np.append(sig, pad)
         # Get within-frame sample indices
         idx1 = np.tile(
             np.arange(0, self.frame_len), (self.num_frames, 1))  # 360 x 400
@@ -106,6 +106,7 @@ class SpeechFeatures:
             sig = self.sig
         # Windowing (returns self.frames)
         self.frames = self._get_frames_windowed(sig=sig)
+
         # Compute spectrogram
         mag_frames = np.absolute(
             np.fft.rfft(self.frames, n=nfft))  # frames x (NFFT//2+1)
@@ -113,6 +114,7 @@ class SpeechFeatures:
         _pow_frames = np.where(pow_frames == 0,
                                np.finfo(float).eps, pow_frames)
         log_frames = 10 * np.log10(_pow_frames)  # See pow2db() in Matlab
+
         if linfilt:
             if not nfilt:
                 nfilt = self.nfilt

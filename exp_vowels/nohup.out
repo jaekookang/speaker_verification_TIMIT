@@ -1,0 +1,22 @@
+2018-08-12 00:25:23.956574: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6006 (Press CTRL+C to quit)
+2018-08-12 00:25:34.241720: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6007 (Press CTRL+C to quit)
+2018-08-12 00:25:47.423925: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6008 (Press CTRL+C to quit)
+2018-08-12 00:26:00.515327: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6009 (Press CTRL+C to quit)
+2018-08-12 00:27:36.301806: W tensorflow/core/framework/allocator.cc:101] Allocation of 223038400 exceeds 10% of system memory.
+2018-08-12 00:28:22.360660: W tensorflow/core/framework/allocator.cc:101] Allocation of 1144186992 exceeds 10% of system memory.
+2018-08-12 00:32:15.126092: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6010 (Press CTRL+C to quit)
+2018-08-12 00:45:27.128816: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6010 (Press CTRL+C to quit)
+2018-08-14 03:37:59.349113: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6006 (Press CTRL+C to quit)
+2018-08-14 03:38:10.461375: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6007 (Press CTRL+C to quit)
+2018-08-14 03:38:20.072073: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6008 (Press CTRL+C to quit)
+2018-08-14 03:38:37.082586: I tensorflow/core/platform/cpu_feature_guard.cc:140] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+TensorBoard 1.8.0 at http://apple:6009 (Press CTRL+C to quit)

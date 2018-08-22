@@ -92,7 +92,8 @@ if __name__ == '__main__':
 
     # Load data
     TMT_DIR = '../data/TMT'
-    SDICT_DIR = 'spkr_sdict_fft.npy'
+    # SDICT_DIR = 'spkr_sdict_fftpca.npy'
+    SDICT_DIR = 'spkr_sdict_fftres.npy'
     CDICT_DIR = 'spkr_cdict_fft.npy'
     LOG_DIR = f'vis_{suffix}'
     META_DIR = os.path.join(LOG_DIR, 'meta')
@@ -100,7 +101,8 @@ if __name__ == '__main__':
     cdict = np.load(CDICT_DIR).item()
     S = pd.read_table('../data/spkr_info.txt', sep=',', na_filter=False)
     phones = ['iy', 'aa', 'uh', 's', 'f']
-    NUM_DIM = [40, 100, 200, 300, 400, 513]
+    NUM_DIM = [513]
+    # NUM_DIM = [12, 20, hp.nfilt]
     spkr_num = 630  # total: 630
     spkr_keys = random.sample([*sdict], spkr_num)
 
@@ -109,9 +111,14 @@ if __name__ == '__main__':
     safe_mkdir(META_DIR)
 
     # Combine all data
-    _x = np.array([], dtype=np.float32).reshape(0, hp.num_freq//2+1)
-    sdict_cent = {s: np.array([], dtype=np.float32).reshape(0, hp.num_freq//2+1)
-                  for s in spkr_keys}
+    # _x = np.array([], dtype=np.float32).reshape(
+    #     0, hp.nfilt)  # hp.num_freq//2+1
+    _x = np.array([], dtype=np.float32).reshape(
+        0, hp.num_freq//2+1)  # hp.num_freq//2+1
+    # sdict_cent = {s: np.array([], dtype=np.float32).reshape(
+    #     0, hp.nfilt) for s in spkr_keys}  # hp.num_freq//2+1
+    sdict_cent = {s: np.array([], dtype=np.float32).reshape(
+        0, hp.num_freq//2+1) for s in spkr_keys}  # hp.num_freq//2+1
     meta_spkr_vowel = []
     for s in tqdm(spkr_keys):
         for v in phones:
@@ -122,8 +129,10 @@ if __name__ == '__main__':
             # Add meta lines
             for _ in range(sdict[s][v].shape[0]):
                 meta_spkr_vowel.append([s, v])
+    # Centering is not required
+    # x = _x
 
-    # Center data
+    # # Center data
     x = _x - np.mean(_x, axis=0, keepdims=True)
     # # Save centered data
     # np.save(os.path.join(LOG_DIR, 'x_data.npy'), x)
